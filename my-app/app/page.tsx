@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { Camera, Upload } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import AnimatedHeader from '../components/ui/animatedheader';
+import { useRef } from 'react';
 
 export default function Home() {
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -83,14 +85,14 @@ export default function Home() {
 
             <div className="flex justify-center gap-4">
               <Button
-                onClick={() => document.querySelector('input[type="file"]')?.click()}
+                onClick={() => fileInputRef.current?.click()}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload Image
               </Button>
               <Button
-                onClick={() => document.querySelector('input[type="file"]')?.click()}
+                onClick={() => fileInputRef.current?.click()}
                 className="bg-green-600 hover:bg-green-700"
               >
                 <Camera className="w-4 h-4 mr-2" />
