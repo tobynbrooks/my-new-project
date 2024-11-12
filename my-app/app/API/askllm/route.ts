@@ -6,6 +6,29 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+interface TireAnalysis {
+  tireSize: {
+    width: string;
+    aspectRatio: string;
+    wheelDiameter: string;
+    fullSize: string;
+  };
+  safety: {
+    isSafeToDrive: boolean;
+    visibleDamage: boolean;
+    sufficientTread: boolean;
+    unevenWear: boolean;
+    needsReplacement: boolean;
+  };
+  explanations: {
+    safety: string;
+    damage: string;
+    tread: string;
+    wear: string;
+    replacement: string;
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -27,14 +50,38 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "system",
-          content: "You are a tire analysis expert. Provide structured boolean responses about tire condition. Focus only on safety-critical aspects."
+          content: `You are a tire analysis expert. Analyze the tire image and provide a structured response.
+          You must identify the tire size (if visible) and assess safety conditions.
+          Always respond in the following JSON format:
+          {
+            "tireSize": {
+              "width": "xxx", // tire width in mm
+              "aspectRatio": "xx", // aspect ratio
+              "wheelDiameter": "xx", // wheel diameter in inches
+              "fullSize": "xxx/xx Rxx" // full tire size
+            },
+            "safety": {
+              "isSafeToDrive": true/false,
+              "visibleDamage": true/false,
+              "sufficientTread": true/false,
+              "unevenWear": true/false,
+              "needsReplacement": true/false
+            },
+            "explanations": {
+              "safety": "one-line explanation",
+              "damage": "one-line explanation",
+              "tread": "one-line explanation",
+              "wear": "one-line explanation",
+              "replacement": "one-line explanation"
+            }
+          }`
         },
         {
           role: "user",
           content: [
             { 
               type: "text", 
-              text: "Analyze this tire and provide YES/NO answers for the following questions:\n1. Is the tire safe to drive? \n2. Is there visible damage?\n3. Is the tread depth sufficient?\n4. Are there signs of uneven wear?\n5. Does the tire need immediate replacement?\n\nFor each YES/NO answer, provide a one-line explanation." 
+              text: "Analyze this tire image and provide the assessment in the specified JSON format. If the tire size is not visible, use null for size values." 
             },
             {
               type: "image_url",
@@ -45,13 +92,14 @@ export async function POST(request: NextRequest) {
           ],
         },
       ],
-      max_tokens: 500,
+      max_tokens: 1000,
+      response_format: { type: "json_object" },
     });
 
-    const analysis = response.choices[0].message.content;
+    const analysis = JSON.parse(response.choices[0].message.content!) as TireAnalysis;
     console.log('Analysis:', analysis);
 
-    return NextResponse.json({ analysis: analysis });
+    return NextResponse.json(analysis);
   } catch (error) {
     console.error('Error processing image:', error);
     if (error instanceof Error) {
