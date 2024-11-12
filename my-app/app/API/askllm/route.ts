@@ -30,6 +30,9 @@ interface TireAnalysis {
 }
 
 export async function POST(request: NextRequest) {
+  console.log('API Key exists:', !!process.env.OPENAI_API_KEY);
+  console.log('API Key starts with:', process.env.OPENAI_API_KEY?.substring(0, 7));
+
   try {
     const formData = await request.formData();
     const image = formData.get('image') as File;
