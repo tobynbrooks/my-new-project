@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     
       // Add debug section here
       if (viewType === 'sidewallView') {
-        console.log('\n🔍 SIDEWALL ANALYSIS DEBUG');
+        console.log('\n🔍 SIDEWALL ANALYSIS DEBUGGER');
         console.log('----------------------------------------');
         console.log('Raw Response:', completion.choices[0]?.message?.content);
         try {
