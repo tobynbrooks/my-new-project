@@ -221,7 +221,7 @@ export default function Home() {
       <div className="flex flex-col items-center gap-2 text-gray-500">
         <Activity className="w-8 h-8" />
         <span>Upload {viewType === 'treadView' ? 'tread' : 'sidewall'}</span>
-        <span className="text-sm text-gray-400">Image or Video</span>
+        <span className="text-sm text-gray-400">Image or Videos</span>
       </div>
     );
 
