@@ -7,6 +7,11 @@ import AnimatedHeader from '../components/ui/animatedheader';
 import { useRef } from 'react';
 import { TyreSize, SafetyInfo, Explanations, TyreAnalysis, TireImage, ViewType, AnalysisState, ViewData, TireMedia } from '../lib/types';
 
+interface MediaPreviewProps {
+  viewType: ViewType;
+  media: TireMedia;
+}
+
 export default function Home() {
   const [media, setMedia] = useState<ViewData>({
     treadView: { file: null, preview: '', type: 'image' },
@@ -211,7 +216,7 @@ export default function Home() {
     );
   };
 
-  const MediaPreview = ({ viewType, media }: { viewType: ViewType, media: TireMedia }) => {
+  const MediaPreview = ({ viewType, media }: MediaPreviewProps) => {
     if (!media.preview) return (
       <div className="flex flex-col items-center gap-2 text-gray-500">
         <Activity className="w-8 h-8" />
