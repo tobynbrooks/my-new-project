@@ -1,28 +1,8 @@
 import OpenAI from 'openai';
 import { NextRequest } from 'next/server';
+import { TyreSize, SafetyInfo, Explanations, TyreAnalysis, TireImage, ViewType, AnalysisState } from '../../../lib/types';
 
-interface TyreAnalysis {
-  tyreSize: {
-    width: string | null;
-    aspectRatio: string | null;
-    wheelDiameter: string | null;
-    fullSize: string | null;
-  };
-  safety: {
-    isSafeToDrive: boolean;
-    visibleDamage: boolean;
-    sufficientTread: boolean;
-    unevenWear: boolean;
-    needsReplacement: boolean;
-  };
-  explanations: {
-    safety: string;
-    damage: string;
-    tread: string;
-    wear: string;
-    replacement: string;
-  };
-}
+
 
 export const runtime = 'edge';
 
@@ -39,33 +19,26 @@ const SYSTEM_PROMPTS = {
   - Second number after the slash is aspect ratio (e.g. 65)
   - Last number after R is wheel diameter (e.g. 17)
 
-  In this image, find these three numbers and return them in this EXACT format:
+  CRITICAL RULES:
+  1. If ANY part of the size marking is unclear or not visible:
+     - Set isImageClear to false
+     - Set ALL fields including fullSize to "not available"
+     - Do not provide partial information
+     - Do not guess or infer any numbers
+  2. fullSize must ONLY be populated if ALL three numbers are clearly visible
+  3. If you see other text (like brand names) but not the complete size marking, all fields must be "not available"
+  4. Respond with "not available" rather than making assumptions
+
+  Return a JSON response with EXACTLY this structure:
   {
     "tyreSize": {
-      "width": "255",
-      "aspectRatio": "65",
-      "wheelDiameter": "17",
-      "fullSize": "255/65R17"
-    },
-    
-
-Return a JSON response with EXACTLY this structure:
-{
-  "tyreSize": {
-    "width": "number in mm",        // e.g., "215"
-    "aspectRatio": "number",        // e.g., "55"
-    "wheelDiameter": "inches",      // e.g., "17"
-    "fullSize": "complete size"     // e.g., "215/55R17"
-  },
- 
-  "explanations": {
-    "safety": "Detailed overall safety assessment with specific concerns",
-    "damage": "Description of any visible damage or irregular conditions",
-    "tread": "Specific tread depth observations and measurements",
-    "wear": "Analysis of wear patterns and possible causes",
-    "replacement": "Clear recommendation with timeline (immediate/soon/monitor)"
-  }
-}`,
+      "width": "number or 'not available'",
+      "aspectRatio": "number or 'not available'",
+      "wheelDiameter": "number or 'not available'",
+      "fullSize": "complete size or 'not available'",
+      "isImageClear": false if ANY numbers are unclear or missing
+    }
+  }`,
 
   treadView: `You are a tyre expert. Always use British English spelling (tyre, not tire). 
 
@@ -124,29 +97,43 @@ export async function POST(request: NextRequest) {
     console.log('----------------------------------------\n');
 
     const formData = await request.formData();
-    const image = formData.get('image') as File;
+    const file = formData.get('file') as File;
     const viewType = formData.get('viewType') as 'sidewallView' | 'treadView';
+    const mediaType = formData.get('mediaType') as 'image' | 'video';
     
-    if (!image) {
-      console.error('❌ Error: No image provided');
-      return Response.json({ error: 'No image provided' }, { status: 400 });
+    if (!file) {
+      console.error('❌ Error: No file provided');
+      return Response.json({ error: 'No file provided' }, { status: 400 });
     }
     
-    if (image.size > MAX_IMAGE_SIZE) {
-      console.error('❌ Error: Image size exceeds limit');
-      return Response.json({ error: 'Image size exceeds 4MB limit' }, { status: 400 });
+    const VIDEO_SIZE_LIMIT = 50 * 1024 * 1024; // 50MB for videos
+    const size_limit = mediaType === 'video' ? VIDEO_SIZE_LIMIT : MAX_IMAGE_SIZE;
+    
+    if (file.size > size_limit) {
+      console.error('❌ Error: File size exceeds limit');
+      return Response.json({ 
+        error: `File size exceeds ${mediaType === 'video' ? '50MB' : '4MB'} limit` 
+      }, { status: 400 });
+    }
+
+    if (mediaType === 'video' && !file.type.startsWith('video/')) {
+      return Response.json({ error: 'Invalid video format' }, { status: 400 });
     }
     
-    const bytes = await image.arrayBuffer();
+    const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const base64Image = `data:${image.type};base64,${buffer.toString('base64')}`;
+    const base64File = `data:${file.type};base64,${buffer.toString('base64')}`;
     
+    const mediaPrompt = mediaType === 'video' 
+      ? `This is a video of the tire ${viewType}. Please analyze all visible aspects carefully.`
+      : USER_PROMPTS[viewType];
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     try {
       const completion = await openai.chat.completions.create({
-        model: "gpt-4-turbo",  
+        model: "gpt-4-turbo",  // Make sure to use vision model
         messages: [
           {
             role: "system",
@@ -157,11 +144,14 @@ export async function POST(request: NextRequest) {
             content: [
               { 
                 type: "text", 
-                text: USER_PROMPTS[viewType]
+                text: mediaPrompt
               },
               { 
                 type: "image_url", 
-                image_url: { url: base64Image } 
+                image_url: { 
+                  url: base64File,
+                  detail: mediaType === 'video' ? 'high' : 'auto' 
+                } 
               }
             ]
           }
@@ -201,7 +191,24 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const analysis = JSON.parse(contentString) as TyreAnalysis;  // Changed from TireAnalysis
+        const analysis = JSON.parse(contentString) as TyreAnalysis;
+        
+        // Force consistency: if any component is not available, everything should be not available
+        if (
+          (analysis.tyreSize.width as any) === 'not available' || 
+          !analysis.tyreSize.width ||
+          (analysis.tyreSize.aspectRatio as any) === 'not available' || 
+          !analysis.tyreSize.aspectRatio ||
+          (analysis.tyreSize.wheelDiameter as any) === 'not available' || 
+          !analysis.tyreSize.wheelDiameter
+        ) {
+          analysis.tyreSize.isImageClear = false;
+          (analysis.tyreSize.width as any) = 'not available';
+          (analysis.tyreSize.aspectRatio as any) = 'not available';
+          (analysis.tyreSize.wheelDiameter as any) = 'not available';
+          analysis.tyreSize.fullSize = 'not available';
+        }
+
         return Response.json(analysis);
       } catch (parseError) {
         console.error('❌ JSON Parse Error:', parseError);

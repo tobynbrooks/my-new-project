@@ -5,51 +5,12 @@ import { Camera, Upload, Ruler, Activity } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import AnimatedHeader from '../components/ui/animatedheader';
 import { useRef } from 'react';
-
-interface TyreSize {
-  width: string | null;
-  aspectRatio: string | null;
-  wheelDiameter: string | null;
-  fullSize: string | null;
-}
-
-interface SafetyInfo {
-  isSafeToDrive: boolean;
-  visibleDamage: boolean;
-  sufficientTread: boolean;
-  unevenWear: boolean;
-  needsReplacement: boolean;
-}
-
-interface Explanations {
-  safety: string;
-  damage: string;
-  tread: string;
-  wear: string;
-  replacement: string;
-}
-
-interface TyreAnalysis {
-  tyreSize: TyreSize;
-  safety: SafetyInfo;
-  explanations: Explanations;
-}
-
-interface TireImage {
-  file: File | null;
-  preview: string;
-}
-
-type ViewType = 'treadView' | 'sidewallView';
-
-interface AnalysisState {
-  [key: string]: TyreAnalysis | null;
-}
+import { TyreSize, SafetyInfo, Explanations, TyreAnalysis, TireImage, ViewType, AnalysisState, ViewData, TireMedia } from '../lib/types';
 
 export default function Home() {
-  const [images, setImages] = useState<{ [key in ViewType]: TireImage }>({
-    treadView: { file: null, preview: '' },
-    sidewallView: { file: null, preview: '' }
+  const [media, setMedia] = useState<ViewData>({
+    treadView: { file: null, preview: '', type: 'image' },
+    sidewallView: { file: null, preview: '', type: 'image' }
   });
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -62,20 +23,28 @@ export default function Home() {
   const treadFileInputRef = useRef<HTMLInputElement>(null);
   const sidewallFileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, viewType: ViewType) => {
+  const handleMediaUpload = (event: React.ChangeEvent<HTMLInputElement>, viewType: ViewType) => {
     const file = event.target.files?.[0];
     if (file) {
+      const isVideo = file.type.startsWith('video/');
       const reader = new FileReader();
+      
       reader.onloadend = () => {
-        setImages(prev => ({
+        setMedia(prev => ({
           ...prev,
           [viewType]: {
             file: file,
-            preview: reader.result as string
+            preview: isVideo ? URL.createObjectURL(file) : reader.result as string,
+            type: isVideo ? 'video' : 'image'
           }
         }));
       };
-      reader.readAsDataURL(file);
+
+      if (isVideo) {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsDataURL(file);
+      }
       
       setAnalysis(prev => ({
         ...prev,
@@ -87,18 +56,19 @@ export default function Home() {
 
   
     const handleAnalyze = async () => {
-      const hasAtLeastOneImage = images.treadView.file || images.sidewallView.file;
-      if (!hasAtLeastOneImage) return;
+      const hasMedia = media.treadView.file || media.sidewallView.file;
+      if (!hasMedia) return;
       
       setIsAnalyzing(true);
       setError(null);
     
       try {
-        for (const [key, image] of Object.entries(images)) {
-          if (image.file) {
+        for (const [key, mediaItem] of Object.entries(media)) {
+          if (mediaItem.file) {
             const formData = new FormData();
-            formData.append('image', image.file);
+            formData.append('file', mediaItem.file);
             formData.append('viewType', key);
+            formData.append('mediaType', mediaItem.type);
             
             const response = await fetch('/API/askllm', {  
               method: 'POST',
@@ -138,6 +108,13 @@ export default function Home() {
 
   const renderAnalysisResult = (viewType: ViewType) => {
     const currentAnalysis = analysis[viewType];
+
+    console.log('Rendering Analysis:', {
+      viewType,
+      isImageClear: currentAnalysis?.tyreSize?.isImageClear,
+      fullResponse: currentAnalysis
+    });
+
     if (!currentAnalysis) return null;
 
     return viewType === 'treadView' ? (
@@ -191,6 +168,13 @@ export default function Home() {
           <Ruler className="w-5 h-5" />
           Sidewall Analysis Results
         </h2>
+
+          {/* Add image clarity warning when tire size data is not available */}
+          {!currentAnalysis.tyreSize.isImageClear && (
+          <div className="text-amber-600 bg-amber-50 p-2 rounded mb-4">
+          Warning: Image quality is not clear enough for accurate tire size analysis
+          </div>
+        )}
         <div className="mb-6">
           <h3 className="text-lg font-medium mb-2">Tire Specifications</h3>
           <div className="grid grid-cols-1 gap-4 text-gray-700">
@@ -227,6 +211,37 @@ export default function Home() {
     );
   };
 
+  const MediaPreview = ({ viewType, media }: { viewType: ViewType, media: TireMedia }) => {
+    if (!media.preview) return (
+      <div className="flex flex-col items-center gap-2 text-gray-500">
+        <Activity className="w-8 h-8" />
+        <span>Upload {viewType === 'treadView' ? 'tread' : 'sidewall'}</span>
+        <span className="text-sm text-gray-400">Image or video</span>
+      </div>
+    );
+
+    return (
+      <>
+        {media.type === 'video' ? (
+          <video
+            src={media.preview}
+            controls
+            className="object-contain w-full h-full rounded-lg"
+          />
+        ) : (
+          <img
+            src={media.preview}
+            alt={`Tire ${viewType}`}
+            className="object-contain w-full h-full rounded-lg"
+          />
+        )}
+        <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm">
+          {viewType === 'treadView' ? 'Tread' : 'Sidewall'} View
+        </div>
+      </>
+    );
+  };
+
   return (
     <div>
       <AnimatedHeader />
@@ -250,31 +265,14 @@ export default function Home() {
               <div className="flex justify-center">
                 <label className="flex flex-col items-center gap-2 cursor-pointer">
                   <div className="flex items-center justify-center w-64 h-64 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
-                    {images.treadView.preview ? (
-                      <>
-                        <img
-                          src={images.treadView.preview}
-                          alt="Tire tread view"
-                          className="object-contain w-full h-full rounded-lg"
-                        />
-                        <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm">
-                          Tread View
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-gray-500">
-                        <Activity className="w-8 h-8" />
-                        <span>Upload tread image</span>
-                        <span className="text-sm text-gray-400">For wear analysis</span>
-                      </div>
-                    )}
+                    <MediaPreview viewType="treadView" media={media.treadView} />
                   </div>
                   <input
                     ref={treadFileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/*"
                     capture="environment"
-                    onChange={(e) => handleImageUpload(e, 'treadView')}
+                    onChange={(e) => handleMediaUpload(e, 'treadView')}
                     className="hidden"
                   />
                 </label>
@@ -305,36 +303,19 @@ export default function Home() {
                   <Ruler className="w-5 h-5" />
                   Sidewall Analysis
                 </h2>
-                <p className="text-sm text-gray-600">Upload a clear image of the tire sidewall to analyze size and specifications</p>
+                <p className="text-sm text-gray-600">Upload a clear image of the tyre sidewall to analyze size and specifications</p>
               </div>
               <div className="flex justify-center">
                 <label className="flex flex-col items-center gap-2 cursor-pointer">
                   <div className="flex items-center justify-center w-64 h-64 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
-                    {images.sidewallView.preview ? (
-                      <>
-                        <img
-                          src={images.sidewallView.preview}
-                          alt="Tire sidewall view"
-                          className="object-contain w-full h-full rounded-lg"
-                        />
-                        <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm">
-                          Sidewall View
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-gray-500">
-                        <Ruler className="w-8 h-8" />
-                        <span>Upload sidewall image</span>
-                        <span className="text-sm text-gray-400">For size analysis</span>
-                      </div>
-                    )}
+                    <MediaPreview viewType="sidewallView" media={media.sidewallView} />
                   </div>
                   <input
                     ref={sidewallFileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/*"
                     capture="environment"
-                    onChange={(e) => handleImageUpload(e, 'sidewallView')}
+                    onChange={(e) => handleMediaUpload(e, 'sidewallView')}
                     className="hidden"
                   />
                 </label>
@@ -362,10 +343,10 @@ export default function Home() {
           {/* Analyze Button */}
           <Button
             onClick={handleAnalyze}
-            disabled={!images.treadView.file && !images.sidewallView.file || isAnalyzing}
+            disabled={!media.treadView.file && !media.sidewallView.file || isAnalyzing}
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400"
           >
-            {isAnalyzing ? 'Analyzing...' : 'Analyze Tyre Views'}
+            {isAnalyzing ? 'Analyzing...' : 'Analyse Tyre Views'}
           </Button>
 
           {/* Error Display */}
