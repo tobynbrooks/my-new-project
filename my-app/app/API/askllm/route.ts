@@ -12,7 +12,7 @@ const openai = new OpenAI({
 
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
 
-const SYSTEM_PROMPTS = {
+const SYSTEM_PROMPTS: Record<ViewType, string> = {
   sidewallView: `You are a tyre expert. Look at the sidewall and find the tyre size marking.
   The size will be three numbers separated like this: 255/65R17
   - First number is width (e.g. 255)
@@ -73,7 +73,7 @@ Return a JSON response with EXACTLY this structure:
 }`
 };
 
-const USER_PROMPTS = {
+const USER_PROMPTS: Record<ViewType, string> = {
   sidewallView: `Analyze this tyre sidewall image. Focus first on the raised size markings that follow 
 the pattern [width]/[aspect ratio]R[diameter]. For example: 215/55R17.
 
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const viewType = formData.get('viewType') as 'sidewallView' | 'treadView';
+    const viewType = formData.get('viewType') as ViewType;
     const mediaType = formData.get('mediaType') as 'image' | 'video';
     
     if (!file) {

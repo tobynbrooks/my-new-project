@@ -216,7 +216,7 @@ export default function Home() {
       <div className="flex flex-col items-center gap-2 text-gray-500">
         <Activity className="w-8 h-8" />
         <span>Upload {viewType === 'treadView' ? 'tread' : 'sidewall'}</span>
-        <span className="text-sm text-gray-400">Image or video</span>
+        <span className="text-sm text-gray-400">Image or Video</span>
       </div>
     );
 
@@ -291,7 +291,7 @@ export default function Home() {
                   className="bg-green-600 hover:bg-green-700"
                 >
                   <Camera className="w-4 h-4 mr-2" />
-                  Photo Tread
+                  Video Tread
                 </Button>
               </div>
             </div>
