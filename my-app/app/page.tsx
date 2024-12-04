@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Camera, Upload, Ruler, Activity } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import AnimatedHeader from '../components/ui/animatedheader';
-import { useRef } from 'react';
 import { TyreSize, SafetyInfo, Explanations, TyreAnalysis, TireImage, ViewType, AnalysisState, ViewData, TireMedia } from '../lib/types';
+import { extractVideoFrames, handleAnalyze } from '@/lib/video-utils';
 
 interface MediaPreviewProps {
   viewType: ViewType;
@@ -28,97 +28,73 @@ export default function Home() {
   const treadFileInputRef = useRef<HTMLInputElement>(null);
   const sidewallFileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleMediaUpload = (event: React.ChangeEvent<HTMLInputElement>, viewType: ViewType) => {
-    const file = event.target.files?.[0];
-    if (file) {
+  // Handles when a user uploads a new image or video
+  // - Accepts both image and video files
+  // - For videos: extracts frames using extractVideoFrames
+  // - For images: creates a preview URL
+  // - Updates the media state with the new file info
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, viewType: ViewType) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    console.group('📤 Media Upload');
+    console.log('File type:', file.type);
+    console.log('View type:', viewType);
+
+    try {
       const isVideo = file.type.startsWith('video/');
-      const reader = new FileReader();
-      
-      reader.onloadend = () => {
+      console.log('Is video:', isVideo);
+
+      if (isVideo) {
+        console.log('Starting video frame extraction...');
+        const frames = await extractVideoFrames(file);
+        console.log(`Extracted ${frames.length} frames`);
+
         setMedia(prev => ({
           ...prev,
           [viewType]: {
-            file: file,
-            preview: isVideo ? URL.createObjectURL(file) : reader.result as string,
-            type: isVideo ? 'video' : 'image'
+            file,
+            preview: URL.createObjectURL(file),
+            type: 'video',
+            frames
           }
         }));
-      };
-
-      if (isVideo) {
-        reader.readAsArrayBuffer(file);
       } else {
-        reader.readAsDataURL(file);
+        setMedia(prev => ({
+          ...prev,
+          [viewType]: {
+            file,
+            preview: URL.createObjectURL(file),
+            type: 'image'
+          }
+        }));
       }
-      
-      setAnalysis(prev => ({
-        ...prev,
-        [viewType]: null
-      }));
-      setError(null);
+    } catch (error) {
+      console.error('Media upload error:', error);
+      setError('Error processing media file');
+    } finally {
+      console.groupEnd();
     }
   };
 
-  
-    const handleAnalyze = async () => {
-      const hasMedia = media.treadView.file || media.sidewallView.file;
-      if (!hasMedia) return;
-      
-      setIsAnalyzing(true);
-      setError(null);
-    
-      try {
-        for (const [key, mediaItem] of Object.entries(media)) {
-          if (mediaItem.file) {
-            const formData = new FormData();
-            formData.append('file', mediaItem.file);
-            formData.append('viewType', key);
-            formData.append('mediaType', mediaItem.type);
-            
-            const response = await fetch('/API/askllm', {  
-              method: 'POST',
-              body: formData,
-            });
-    
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-    
-            // Debug logs
-            console.log('Response from API:', await response.clone().json());
-            
-            const analysisResult = await response.json();
-            console.log('Analysis Result:', key, analysisResult);
-    
-            if ('error' in analysisResult) {
-              throw new Error(analysisResult.error);
-            }
-    
-            setAnalysis(prev => {
-              console.log('Setting Analysis:', key, analysisResult);
-              return {
-                ...prev,
-                [key]: analysisResult
-              };
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error analyzing images:', error);
-        setError(error instanceof Error ? error.message : 'Error analyzing images');
-      } finally {
-        setIsAnalyzing(false);
-      }
-  };
-
+  // Renders the analysis results in the UI
+  // - Different display for tread vs sidewall views
+  // - Shows safety indicators with color coding
+  // - Displays detailed explanations for each aspect
+  // - Includes warnings for unclear images
+  // - Formats tire specifications in a readable way
   const renderAnalysisResult = (viewType: ViewType) => {
     const currentAnalysis = analysis[viewType];
 
-    console.log('Rendering Analysis:', {
-      viewType,
-      isImageClear: currentAnalysis?.tyreSize?.isImageClear,
-      fullResponse: currentAnalysis
-    });
+    // Log raw LLM response for both view types
+    if (currentAnalysis) {
+      console.group(`🔍 Raw LLM Response for ${viewType === 'treadView' ? 'Tread' : 'Sidewall'}`);
+      console.log('Timestamp:', new Date().toISOString());
+      console.log('View Type:', viewType);
+      console.log('Full Response:');
+      console.log(JSON.stringify(currentAnalysis, null, 2));
+      console.groupEnd();
+    }
 
     if (!currentAnalysis) return null;
 
@@ -216,7 +192,32 @@ export default function Home() {
     );
   };
 
-  const MediaPreview = ({ viewType, media }: MediaPreviewProps) => {
+  // Media preview component
+  // - Shows uploaded image or video in the UI
+  // - Handles both image and video previews
+  // - Includes frame preview for videos
+  // - Shows loading state while media loads
+  const MediaPreview: React.FC<MediaPreviewProps> = ({ viewType, media }) => {
+    const [showFrames, setShowFrames] = useState(false);
+
+    // Add debug info for displayed images
+    const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+      const img = event.target as HTMLImageElement;
+      console.log(`UI Display Image Details:`, {
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+        displayWidth: img.width,
+        displayHeight: img.height,
+      });
+    };
+
+    if (isAnalyzing) return (
+      <div className="flex flex-col items-center gap-2 text-gray-500">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        <span>Processing video...</span>
+      </div>
+    );
+
     if (!media.preview) return (
       <div className="flex flex-col items-center gap-2 text-gray-500">
         <Activity className="w-8 h-8" />
@@ -226,24 +227,55 @@ export default function Home() {
     );
 
     return (
-      <>
+      <div className="relative w-full h-full">
         {media.type === 'video' ? (
-          <video
-            src={media.preview}
-            controls
-            className="object-contain w-full h-full rounded-lg"
-          />
+          <>
+            <video
+              src={media.preview}
+              className="object-contain w-full h-full rounded-lg"
+              controls
+            />
+            {/* Toggle button for frames */}
+            <button
+              onClick={() => setShowFrames(!showFrames)}
+              className="absolute top-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-sm"
+            >
+              {showFrames ? 'Hide Frames' : 'Show Frames'}
+            </button>
+            
+            {/* Frames display */}
+            {showFrames && media.frames && media.frames.length > 0 && (
+              <div className="absolute inset-0 bg-white overflow-auto p-4">
+                <div className="grid grid-cols-2 gap-2">
+                  {media.frames.map((frame, index) => (
+                    <div key={index} className="relative">
+                      <img 
+                        src={frame} 
+                        alt={`Frame ${index}`}
+                        className="w-full rounded border border-gray-200"
+                        onLoad={handleImageLoad}
+                      />
+                      <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
+                        Frame {index}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <img
             src={media.preview}
             alt={`Tire ${viewType}`}
             className="object-contain w-full h-full rounded-lg"
+            onLoad={handleImageLoad}
           />
         )}
         <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm">
           {viewType === 'treadView' ? 'Tread' : 'Sidewall'} View
         </div>
-      </>
+      </div>
     );
   };
 
@@ -347,7 +379,7 @@ export default function Home() {
 
           {/* Analyze Button */}
           <Button
-            onClick={handleAnalyze}
+            onClick={() => handleAnalyze(media, setIsAnalyzing, setError, setAnalysis)}
             disabled={!media.treadView.file && !media.sidewallView.file || isAnalyzing}
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400"
           >
