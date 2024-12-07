@@ -1,8 +1,8 @@
 export interface TyreSize {
-    width: number | 'not available';
-    aspectRatio: number | 'not available';
-    wheelDiameter: number | 'not available';
     fullSize: string;
+    width: number;
+    aspectRatio: number;
+    wheelDiameter: number;
     isImageClear: boolean;
   }
   
@@ -24,8 +24,8 @@ export interface TyreSize {
   
   export interface TyreAnalysis {
     tyreSize: TyreSize;
-    safety?: SafetyInfo;
-    explanations?: Explanations;
+    safety: SafetyInfo;
+    explanations: Explanations;
   }
   
   export interface TireImage {
@@ -36,17 +36,32 @@ export interface TyreSize {
     file: File | null;
     preview: string;
     type: 'image' | 'video';
+    frames?: string[];
   }
   
   export type ViewType = 'treadView' | 'sidewallView';
   
   export interface AnalysisState {
-    treadView: TyreAnalysis | null;
-    sidewallView: TyreAnalysis | null;
+    [key: string]: TyreAnalysis | null;
   }
   
   export interface ViewData {
     treadView: TireMedia;
     sidewallView: TireMedia;
   }
+
+  type MessageContentText = {
+    type: "text";
+    text: string;
+  };
   
+  type MessageContentImage = {
+    type: "image";
+    source: {
+      type: "base64";
+      media_type: string;
+      data: string;
+    };
+  };
+  
+  export type Content = MessageContentText | MessageContentImage;
