@@ -88,7 +88,7 @@ export default function Home() {
 
     // Log raw LLM response for both view types
     if (currentAnalysis) {
-      console.group(`🔍 Raw LLM Response for ${viewType === 'treadView' ? 'Tread' : 'Sidewall'}`);
+      console.group(`🔍 Raw LLM Response for ${viewType === ViewType.TREAD_VIEW ? 'Tread' : 'Sidewall'}`);
       console.log('Timestamp:', new Date().toISOString());
       console.log('View Type:', viewType);
       console.log('Full Response:');
@@ -98,7 +98,7 @@ export default function Home() {
 
     if (!currentAnalysis) return null;
 
-    return viewType === 'treadView' ? (
+    return viewType === ViewType.TREAD_VIEW ? (
       <div className="p-4 bg-white rounded-lg shadow">
         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
           <Activity className="w-5 h-5" />
@@ -221,7 +221,7 @@ export default function Home() {
     if (!media.preview) return (
       <div className="flex flex-col items-center gap-2 text-gray-500">
         <Activity className="w-8 h-8" />
-        <span>Upload {viewType === 'treadView' ? 'tread' : 'sidewall'}</span>
+        <span>Upload {viewType === ViewType.TREAD_VIEW ? 'tread' : 'sidewall'}</span>
         <span className="text-sm text-gray-400">Image or Videos</span>
       </div>
     );
@@ -273,7 +273,7 @@ export default function Home() {
           />
         )}
         <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm">
-          {viewType === 'treadView' ? 'Tread' : 'Sidewall'} View
+          {viewType === ViewType.TREAD_VIEW ? 'Tread' : 'Sidewall'} View
         </div>
       </div>
     );
@@ -302,14 +302,14 @@ export default function Home() {
               <div className="flex justify-center">
                 <label className="flex flex-col items-center gap-2 cursor-pointer">
                   <div className="flex items-center justify-center w-64 h-64 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
-                    <MediaPreview viewType="treadView" media={media.treadView} />
+                    <MediaPreview viewType={ViewType.TREAD_VIEW} media={media.treadView} />
                   </div>
                   <input
                     ref={treadFileInputRef}
                     type="file"
                     accept="image/*,video/*"
                     capture="environment"
-                    onChange={(e) => handleMediaUpload(e, 'treadView')}
+                    onChange={(e) => handleMediaUpload(e, ViewType.TREAD_VIEW)}
                     className="hidden"
                   />
                 </label>
@@ -345,14 +345,14 @@ export default function Home() {
               <div className="flex justify-center">
                 <label className="flex flex-col items-center gap-2 cursor-pointer">
                   <div className="flex items-center justify-center w-64 h-64 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
-                    <MediaPreview viewType="sidewallView" media={media.sidewallView} />
+                    <MediaPreview viewType={ViewType.SIDEWALL_VIEW} media={media.sidewallView} />
                   </div>
                   <input
                     ref={sidewallFileInputRef}
                     type="file"
                     accept="image/*,video/*"
                     capture="environment"
-                    onChange={(e) => handleMediaUpload(e, 'sidewallView')}
+                    onChange={(e) => handleMediaUpload(e, ViewType.SIDEWALL_VIEW)}
                     className="hidden"
                   />
                 </label>
@@ -395,8 +395,8 @@ export default function Home() {
 
           {/* Analysis Results */}
           <div className="grid md:grid-cols-2 gap-8">
-            {renderAnalysisResult('treadView')}
-            {renderAnalysisResult('sidewallView')}
+            {renderAnalysisResult(ViewType.TREAD_VIEW)}
+            {renderAnalysisResult(ViewType.SIDEWALL_VIEW)}
           </div>
         </div>
       </div>

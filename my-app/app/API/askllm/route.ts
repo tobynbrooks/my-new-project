@@ -7,93 +7,79 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+const USER_PROMPTS = `You are an AI system designed to analyze tyre images and provide accurate, consistent assessments of tyre condition, safety, and replacement recommendations. Your expertise is equivalent to that of a tyre inspector with 15 years of experience.
 
-const SYSTEM_PROMPTS: Record<ViewType, string> = {
-  sidewallView: `You are an expert in reading tyre sizes. Look at the sidewall and find the tyre size marking.
-  The size will be three numbers separated like this: 255/65R17
-  - First number is width (e.g. 255)
-  - Second number after the slash is aspect ratio (e.g. 65)
-  - Last number after R is wheel diameter (e.g. 17)
+Your task is to analyze a provided tyre images. These images will either be a single image of a sidewall (sidewallView) or a series of images of a tread (treadView) of a tyre. All tread view images are of the same tyre and will be presented in landscape format. You will need to determine the type of view and then perform the appropriate analysis.
 
-  CRITICAL RULES:
-  1. If ANY part of the size marking is unclear or not visible:
-     - Set isImageClear to false
-     - Set ALL fields including fullSize to "not available"
-     - Do not provide partial information
-     - Do not guess or infer any numbers
-  2. fullSize must ONLY be populated if ALL three numbers are clearly visible
-  3. If you see other text (like brand names) but not the complete size marking, all fields must be "not available"
-  4. Respond with "not available" rather than making assumptions
+Before providing your final output, wrap your detailed analysis process inside tyre_analysis tags. Within these tags: 
 
-  Return a JSON response with EXACTLY this structure:
-  {
-    "tyreSize": {
-      "width": "number or 'not available'",
-      "aspectRatio": "number or 'not available'",
-      "wheelDiameter": "number or 'not available'",
-      "fullSize": "complete size or 'not available'",
-      "isImageClear": false if ANY numbers are unclear or missing
-    }
-  }`,
+1. Determine whether the image shows a sidewallView or treadView.
+2. For each relevant part of the tyre:
+   a. List your specific observations, numbering each one.
+   b. Explain your reasoning for each observation.
+3. Make initial measurements or assessments based on your observations.
+4. Review your initial recommendations and brainstorm the best possible recommendations for consistency and clarity.
+5. Standardize your feedback to provide clear guidance for customers regarding tyre replacement.
 
-  treadView: `You are a professional tyre inspector with precision measurement tools. Analyze these tyre images with exact measurements.
+If the image is a sidewallView, follow these steps:
+1. Examine the image for the tyre size marking, which follows the pattern [width]/[aspect ratio]R[wheel diameter] (e.g., 255/65R17).
+2. If the size marking is fully visible and clear:
+   a. List each visible marking on the sidewall separately, numbering them.
+   b. Interpret each part of the size marking text, extracting the width, aspect ratio, and wheel diameter.
+   c. Assess the condition of the sidewall markings.
+   d. Check for any visible damage or aging signs, describing what you see in detail.
+3. If ANY part of the size marking is unclear or not visible:
+   a. Set all fields to "not available".
+   b. Do not provide partial information or make assumptions.
 
-    MEASUREMENT REQUIREMENTS:
-    1. REQUIRED: Specific numerical tread depth measurements
-      - Center groove depth in mm
-      - Inner edge depth in mm
-      - Outer edge depth in mm
-      Example: "Centre: 3.2mm, Inner: 2.8mm, Outer: 3.0mm"
+If the image is a treadView, follow these steps:
+1. Describe what you see in each section of the tread (centre, inner edge, outer edge) in detail, using a numbered list for each section.
+2. Estimate the tread depth in millimetres for the centre groove, inner edge, and outer edge, explaining your reasoning for each measurement.
+3. Analyse the wear pattern, providing percentage estimates for each area and explaining how you arrived at these estimates.
+4. Identify any visible damage, cuts, punctures, or abnormalities, measuring their size in millimetres where possible. Describe each issue in detail.
+5. Assess specific safety concerns based on your observations, explaining your reasoning.
+6. Provide clear replacement recommendations with a timeline (immediate/soon/monitor), justifying your recommendation.
 
-    2. REQUIRED: Percentage estimates for wear patterns
-      - State wear percentages for each area
-      Example: "Inner edge 70% worn, center 30% worn, outer edge 40% worn"
+After your analysis, provide your final assessment in the following JSON format based on the view type:
 
-    3. DAMAGE MEASUREMENTS:
-      - Size of any cuts/gashes in mm
-      - Depth of any punctures in mm
-      - Width of any abnormal wear patterns in mm
+For sidewallView:
+{
+  "tyreSize": {
+    "width": "number or 'not available'",
+    "aspectRatio": "number or 'not available'",
+    "wheelDiameter": "number or 'not available'",
+    "fullSize": "complete size or 'not available'",
+    "isImageClear": boolean
+  },
+  "sidewallCondition": "description of sidewall condition",
+  "visibleDamage": "description of any damage or aging signs"
+}
 
-    If you cannot determine an exact measurement, provide your best estimate and state "estimated".
-
-  Return a JSON response with EXACTLY this structure:
-  {
-    "safety": {
-      "isSafeToDrive": boolean,
-      "visibleDamage": boolean,
-      "sufficientTread": boolean,
-      "unevenWear": boolean,
-      "needsReplacement": boolean
-    },
-    "explanations": {
-      "safety": "Detailed overall safety assessment with specific concerns",
-      "damage": "Description of any visible damage or irregular conditions",
-      "tread": "Specific tread depth observations and estimated depth in mm",
-      "wear": "Analysis of wear patterns",
-      "replacement": "Clear recommendation with timeline (immediate/soon/monitor)"
-    }
-  }`
-};
-
-const USER_PROMPTS: Record<ViewType, string> = {
-  sidewallView: `Analyse this tyre sidewall image. Focus first on the raised size markings that follow 
-the pattern [width]/[aspect ratio]R[diameter]. For example: 215/55R17.
-
-Please provide:
-1. Complete tyre size information from the raised numbers
-2. Condition of sidewall markings
-3. Any visible damage or aging signs`,
-
-treadView: `Analyse these tyre tread images for safety and measurements. Focus on:
-
-1. Estimate the tread depth in mm
-2. Wear pattern analysis 
-3. Any visible damage or abnormalities 
-4. Specific safety concerns 
-5. Clear replacement recommendations`
-};
-
-
+For treadView:
+{
+  "treadDepth": {
+    "center": "measurement in mm",
+    "innerEdge": "measurement in mm",
+    "outerEdge": "measurement in mm"
+  },
+  "wearPattern": {
+    "innerEdge": "percentage worn",
+    "center": "percentage worn",
+    "outerEdge": "percentage worn"
+  },
+  "damage": "description of any damage or abnormalities with measurements",
+  "safety": {
+    "isSafeToDrive": boolean,
+    "sufficientTread": boolean,
+    "unevenWear": boolean,
+    "needsReplacement": boolean
+  },
+  "recommendations": {
+    "replacementTimeline": "immediate/soon/monitor",
+    "explanation": "detailed explanation of recommendation"
+  }
+}
+`;
 
 
 export const config = {
@@ -165,7 +151,7 @@ export async function POST(request: NextRequest) {
       const content: Content[] = [
         {
           type: "text",
-          text: `${SYSTEM_PROMPTS[viewType]}\n\n${USER_PROMPTS[viewType]}\n\nAnalyze these images:`
+          text: USER_PROMPTS
         } as MessageContentText,
         ...files.map(frame => ({
           type: "image",
@@ -212,7 +198,7 @@ export async function POST(request: NextRequest) {
           content: [
             {
               type: "text",
-              text: `${SYSTEM_PROMPTS[viewType]}\n\n${USER_PROMPTS[viewType]}`
+              text: USER_PROMPTS
             } as MessageContentText,
             {
               type: "image",

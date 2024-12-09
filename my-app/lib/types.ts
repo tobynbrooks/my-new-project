@@ -39,7 +39,10 @@ export interface TyreSize {
     frames?: string[];
   }
   
-  export type ViewType = 'treadView' | 'sidewallView';
+  export enum ViewType {
+    TREAD_VIEW = 'treadView',
+    SIDEWALL_VIEW = 'sidewallView'
+  }
   
   export interface AnalysisState {
     [key: string]: TyreAnalysis | null;
