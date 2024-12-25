@@ -1,11 +1,13 @@
 'use client';
 
+
 import { useState, useRef } from 'react';
 import { Camera, Upload, Ruler, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AnimatedHeader from '@/components/ui/animatedheader';
 import { TyreSize, SafetyInfo, Explanations, TyreAnalysis, TireImage, ViewType, AnalysisState, ViewData, TireMedia } from '@/lib/types';
 import { extractVideoFrames, handleAnalyze } from '@/lib/video-utils';
+import TreadAnalysisResult from '@/components/ui/analysis-results/tread-analysis-results';
 
 
 interface MediaPreviewProps {
@@ -20,24 +22,16 @@ export default function TreadAnalysis() {
       preview: '', 
       type: 'image',
       frames: []
-    },
-    sidewallView: {
-      file: null,
-      preview: '',
-      type: 'image',
-      frames: []
     }
   });
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisState>({
-    treadView: null,
-    sidewallView: null
+    treadView: null
   });
   const [error, setError] = useState<string | null>(null);
   
   const treadFileInputRef = useRef<HTMLInputElement>(null);
-  const sidewallFileInputRef = useRef<HTMLInputElement>(null);
 
   // Handles when a user uploads a new image or video
   // - Accepts both image and video files
@@ -86,121 +80,6 @@ export default function TreadAnalysis() {
     } finally {
       console.groupEnd();
     }
-  };
-
-  // Renders the analysis results in the UI
-  // - Different display for tread vs sidewall views
-  // - Shows safety indicators with color coding
-  // - Displays detailed explanations for each aspect
-  // - Includes warnings for unclear images
-  // - Formats tire specifications in a readable way
-  const renderAnalysisResult = (viewType: ViewType) => {
-    const currentAnalysis = analysis[viewType];
-
-    // Log raw LLM response for both view types
-    if (currentAnalysis) {
-      console.group(`🔍 Raw LLM Response for ${viewType === ViewType.TREAD_VIEW ? 'Tread' : 'Sidewall'}`);
-      console.log('Timestamp:', new Date().toISOString());
-      console.log('View Type:', viewType);
-      console.log('Full Response:');
-      console.log(JSON.stringify(currentAnalysis, null, 2));
-      console.groupEnd();
-    }
-
-    if (!currentAnalysis) return null;
-
-    return viewType === ViewType.TREAD_VIEW ? (
-      <div className="p-4 bg-white rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <Activity className="w-5 h-5" />
-          Tread Analysis Results
-        </h2>
-        <div className="space-y-3 text-gray-700">
-          <div>
-            <div className="flex justify-between items-center">
-              <p className="font-medium">Sufficient Tread:</p>
-              <span className={`px-2 py-1 rounded ${
-                currentAnalysis?.safety?.sufficientTread ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
-                {currentAnalysis?.safety?.sufficientTread ? 'Yes' : 'No'}
-              </span>
-            </div>
-              <p className="text-sm mt-1">{currentAnalysis?.explanations?.tread}</p>
-
-          </div>
-
-          <div>
-            <div className="flex justify-between items-center">
-              <p className="font-medium">Uneven Wear:</p>
-              <span className={`px-2 py-1 rounded ${
-                !currentAnalysis?.safety?.unevenWear ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
-                {currentAnalysis?.safety?.unevenWear ? 'Yes' : 'No'}
-              </span>
-            </div>
-            <p className="text-sm mt-1">{currentAnalysis?.explanations?.wear}</p>
-          </div>
-
-          <div>
-            <div className="flex justify-between items-center">
-              <p className="font-medium">Safe to Drive:</p>
-              <span className={`px-2 py-1 rounded ${
-                currentAnalysis?.safety?.isSafeToDrive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
-                {currentAnalysis?.safety?.isSafeToDrive ? 'Yes' : 'No'}
-              </span>
-            </div>
-            <p className="text-sm mt-1">{currentAnalysis?.explanations?.safety}</p>
-          </div>
-        </div>
-      </div>
-    ) : (
-      <div className="p-4 bg-white rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <Ruler className="w-5 h-5" />
-          Sidewall Analysis Results
-        </h2>
-
-          {/* Add image clarity warning when tire size data is not available */}
-          {!currentAnalysis.tyreSize.isImageClear && (
-          <div className="text-amber-600 bg-amber-50 p-2 rounded mb-4">
-          Warning: Image quality is not clear enough for accurate tire size analysis
-          </div>
-        )}
-        <div className="mb-6">
-          <h3 className="text-lg font-medium mb-2">Tire Specifications</h3>
-          <div className="grid grid-cols-1 gap-4 text-gray-700">
-            <div>
-              <p className="font-medium">Full Size:</p>
-              <p>{currentAnalysis?.tyreSize?.fullSize || 'Not visible'}</p>
-            </div>
-            <div>
-              <p className="font-medium">Width:</p>
-              <p>{currentAnalysis?.tyreSize?.width ? `${currentAnalysis?.tyreSize?.width}mm` : 'Not visible'}</p>
-            </div>
-            <div>
-              <p className="font-medium">Aspect Ratio:</p>
-              <p>{currentAnalysis?.tyreSize?.aspectRatio || 'Not visible'}</p>
-            </div>
-            <div>
-              <p className="font-medium">Wheel Diameter:</p>
-              <p>{currentAnalysis?.tyreSize?.wheelDiameter ? `${currentAnalysis?.tyreSize?.wheelDiameter}"` : 'Not visible'}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div>
-          <div className="flex justify-between items-center">
-            <p className="font-medium">Visible Damage:</p>
-            <span className={`px-2 py-1 rounded ${
-              !currentAnalysis?.safety?.visibleDamage ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-            }`}>
-              {currentAnalysis?.safety?.visibleDamage ? 'Yes' : 'No'}
-            </span>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   // Media preview component
@@ -295,106 +174,60 @@ export default function TreadAnalysis() {
       <AnimatedHeader />
       
       <div className="min-h-screen flex items-center justify-center">
-        <div className="max-w-4xl mx-auto space-y-8 p-4">
+        <div className="max-w-2xl mx-auto space-y-8 p-4">
           <h1 className="text-3xl font-bold text-center">Tyre Analysis</h1>
           
-          {/* Image Upload Section */}
-          {/* Image Upload Section - Two Columns */}
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Tread View */}
-            <div className="space-y-4">
-              <div className="text-center space-y-2">
-                <h2 className="text-xl font-semibold flex items-center justify-center gap-2">
-                  <Activity className="w-5 h-5" />
-                  Tread Analysis
-                </h2>
-                <p className="text-sm text-gray-600">Upload a clear image of the tyre tread pattern for wear and condition analysis</p>
-              </div>
-              <div className="flex justify-center">
-                <label className="flex flex-col items-center gap-2 cursor-pointer">
-                  <div className="flex items-center justify-center w-64 h-64 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
-                    <MediaPreview viewType={ViewType.TREAD_VIEW} media={media.treadView} />
-                  </div>
-                  <input
-                    ref={treadFileInputRef}
-                    type="file"
-                    accept="image/*,video/*"
-                    capture="environment"
-                    onChange={(e) => handleMediaUpload(e, ViewType.TREAD_VIEW)}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-              <div className="flex justify-center gap-4">
-                <Button
-                  onClick={() => treadFileInputRef.current?.click()}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload Tread
-                </Button>
-                <Button
-                  onClick={() => treadFileInputRef.current?.click()}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  Video Tread
-                </Button>
-              </div>
+          {/* Upload Section */}
+          <div className="space-y-4">
+            <div className="text-center space-y-2">
+              <h2 className="text-xl font-semibold flex items-center justify-center gap-2">
+                <Activity className="w-5 h-5" />
+                Tread Analysis
+              </h2>
+              <p className="text-sm text-gray-600">Upload a clear image of the tyre tread pattern for wear and condition analysis</p>
+            </div>
+            
+            <div className="flex justify-center">
+              <label className="flex flex-col items-center gap-2 cursor-pointer">
+                <div className="flex items-center justify-center w-80 h-80 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
+                  <MediaPreview viewType={ViewType.TREAD_VIEW} media={media.treadView} />
+                </div>
+                <input
+                  ref={treadFileInputRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  capture="environment"
+                  onChange={(e) => handleMediaUpload(e, ViewType.TREAD_VIEW)}
+                  className="hidden"
+                />
+              </label>
             </div>
 
-            {/* Sidewall View */}
-            <div className="space-y-4">
-              <div className="text-center space-y-2">
-                <h2 className="text-xl font-semibold flex items-center justify-center gap-2">
-                  <Ruler className="w-5 h-5" />
-                  Sidewall Analysis
-                </h2>
-                <p className="text-sm text-gray-600">Upload a clear image of the tyre sidewall to analyze size and specifications</p>
-              </div>
-              <div className="flex justify-center">
-                <label className="flex flex-col items-center gap-2 cursor-pointer">
-                  <div className="flex items-center justify-center w-64 h-64 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
-                    <MediaPreview viewType={ViewType.SIDEWALL_VIEW} media={media.sidewallView} />
-                  </div>
-                  <input
-                    ref={sidewallFileInputRef}
-                    type="file"
-                    accept="image/*,video/*"
-                    capture="environment"
-                    onChange={(e) => handleMediaUpload(e, ViewType.SIDEWALL_VIEW)}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-              <div className="flex justify-center gap-4">
-                <Button
-                  onClick={() => sidewallFileInputRef.current?.click()}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload Sidewall
-                </Button>
-                <Button
-                  onClick={() => sidewallFileInputRef.current?.click()}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  Photo Sidewall
-                </Button>
-              </div>
+            <div className="flex justify-center gap-4">
+              <Button
+                onClick={() => treadFileInputRef.current?.click()}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Upload Image
+              </Button>
+              <Button
+                onClick={() => treadFileInputRef.current?.click()}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                Take Photo
+              </Button>
             </div>
           </div>
 
           {/* Analyze Button */}
           <Button
             onClick={() => handleAnalyze(media, setIsAnalyzing, setError, setAnalysis)}
-            disabled={!media.treadView.file && !media.sidewallView.file || isAnalyzing}
+            disabled={!media.treadView.file || isAnalyzing}
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400"
           >
-            {isAnalyzing ? 'Analyzing...' : 'Analyse Tyre Views'}
+            {isAnalyzing ? 'Analyzing...' : 'Analyse Tyre'}
           </Button>
 
           {/* Error Display */}
@@ -404,11 +237,10 @@ export default function TreadAnalysis() {
             </div>
           )}
 
-          {/* Analysis Results */}
-          <div className="grid md:grid-cols-2 gap-8">
-            {renderAnalysisResult(ViewType.TREAD_VIEW)}
-            {renderAnalysisResult(ViewType.SIDEWALL_VIEW)}
-          </div>
+          {/* New Analysis Results Component */}
+          {analysis.treadView && (
+            <TreadAnalysisResult analysis={analysis.treadView} />
+          )}
         </div>
       </div>
     </div>
