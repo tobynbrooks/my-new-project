@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import type { ViewType } from '@/lib/types';
 
 
@@ -81,12 +81,6 @@ For treadView:
 }
 `;
 
-
-export const config = {
-  api: {
-    bodyParser: false, // Disabling body parser as we're handling raw body
-  },
-}
 
 export async function POST(request: NextRequest) {
   const DEBUG = true; // Debug flag
@@ -254,7 +248,7 @@ export async function POST(request: NextRequest) {
           console.groupEnd();
         }
         
-        return Response.json(JSON.parse(cleanedJson));
+        return NextResponse.json(JSON.parse(cleanedJson));
       } catch (error) {
         console.error('Error parsing Claude response:', error);
         throw new Error('Invalid JSON in Claude response');
@@ -268,7 +262,7 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('API Error:', error);
-    return Response.json({ 
+    return NextResponse.json({ 
       error: error instanceof Error ? error.message : 'Analysis failed' 
     }, { status: 500 });
   } finally {

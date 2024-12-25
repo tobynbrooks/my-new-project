@@ -157,7 +157,7 @@ export const handleAnalyze = async (                                // Main anal
         formData.append('viewType', key as ViewType);
       }
 
-      const response = await fetch('/api/askllm', {               // Send to AI analysis API
+      const response = await fetch('/api/tread-analysis', {               // Send to AI analysis API
         method: 'POST',
         body: formData,
       });
