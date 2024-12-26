@@ -1,19 +1,13 @@
 'use client';
 
-
 import { useState, useRef } from 'react';
-import { Camera, Upload, Ruler, Activity } from 'lucide-react';
+import { Camera, Upload, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AnimatedHeader from '@/components/ui/animatedheader';
-import { TyreSize, SafetyInfo, Explanations, TyreAnalysis, TireImage, ViewType, AnalysisState, ViewData, TireMedia } from '@/lib/types';
-import { extractVideoFrames, handleAnalyze } from '@/lib/video-utils';
+import { ViewType, AnalysisState, ViewData } from '@/lib/types';
+import { extractVideoFrames } from '@/lib/video-utils';
+import AnalyzeButton from '@/components/ui/analyze-button';
 import TreadAnalysisResult from '@/components/ui/analysis-results/tread-analysis-results';
-
-
-interface MediaPreviewProps {
-  viewType: ViewType;
-  media: TireMedia;
-}
 
 export default function TreadAnalysis() {
   const [media, setMedia] = useState<ViewData>({
@@ -33,11 +27,9 @@ export default function TreadAnalysis() {
   
   const treadFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handles when a user uploads a new image or video
-  // - Accepts both image and video files
-  // - For videos: extracts frames using extractVideoFrames
-  // - For images: creates a preview URL
-  // - Updates the media state with the new file info
+  const [showFrames, setShowFrames] = useState(false);
+  const [currentFrame, setCurrentFrame] = useState(0);
+
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, viewType: ViewType) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -55,7 +47,7 @@ export default function TreadAnalysis() {
         const frames = await extractVideoFrames(file);
         console.log(`Extracted ${frames.length} frames`);
 
-        setMedia((prev: ViewData) => ({
+        setMedia(prev => ({
           ...prev,
           [viewType]: {
             file,
@@ -65,14 +57,43 @@ export default function TreadAnalysis() {
           }
         }));
       } else {
-        setMedia((prev: ViewData) => ({
-          ...prev,
-          [viewType]: {
-            file,
-            preview: URL.createObjectURL(file),
-            type: 'image'
+        // Create a compressed preview for images
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+
+        img.onload = () => {
+          // Calculate new dimensions
+          let width = img.width;
+          let height = img.height;
+          const maxDimension = 1024;
+
+          if (width > height && width > maxDimension) {
+            height = (height * maxDimension) / width;
+            width = maxDimension;
+          } else if (height > maxDimension) {
+            width = (width * maxDimension) / height;
+            height = maxDimension;
           }
-        }));
+
+          canvas.width = width;
+          canvas.height = height;
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          const compressedPreview = canvas.toDataURL('image/jpeg', 0.7);
+
+          setMedia(prev => ({
+            ...prev,
+            [viewType]: {
+              file,
+              preview: compressedPreview,
+              type: 'image',
+              frames: []
+            }
+          }));
+        };
+
+        img.src = URL.createObjectURL(file);
       }
     } catch (error) {
       console.error('Media upload error:', error);
@@ -82,90 +103,79 @@ export default function TreadAnalysis() {
     }
   };
 
-  // Media preview component
-  // - Shows uploaded image or video in the UI
-  // - Handles both image and video previews
-  // - Includes frame preview for videos
-  // - Shows loading state while media loads
-  const MediaPreview: React.FC<MediaPreviewProps> = ({ viewType, media }) => {
-    const [showFrames, setShowFrames] = useState(false);
+  const renderPreview = () => {
+    if (!media.treadView.preview) {
+      return <Upload className="w-12 h-12 text-gray-400" />;
+    }
 
-    // Add debug info for displayed images
-    const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
-      const img = event.target as HTMLImageElement;
-      console.log(`UI Display Image Details:`, {
-        width: img.naturalWidth,
-        height: img.naturalHeight,
-        displayWidth: img.width,
-        displayHeight: img.height,
-      });
-    };
-
-    if (isAnalyzing) return (
-      <div className="flex flex-col items-center gap-2 text-gray-500">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-        <span>Processing video...</span>
-      </div>
-    );
-
-    if (!media.preview) return (
-      <div className="flex flex-col items-center gap-2 text-gray-500">
-        <Activity className="w-8 h-8" />
-        <span>Upload {viewType === ViewType.TREAD_VIEW ? 'tread' : 'sidewall'}</span>
-        <span className="text-sm text-gray-400">Image or Videos</span>
-      </div>
-    );
+    if (media.treadView.type === 'video') {
+      const frames = media.treadView.frames || [];  // Provide default empty array
+      
+      return (
+        <div className="relative w-full h-full">
+          {showFrames && frames.length > 0 ? (
+            // Frame viewer
+            <div className="relative w-full h-full">
+              <img 
+                src={frames[currentFrame]} 
+                alt={`Frame ${currentFrame + 1}`}
+                className="w-full h-full object-contain"
+              />
+              <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/50 flex justify-between items-center">
+                <button
+                  onClick={() => setCurrentFrame(prev => Math.max(0, prev - 1))}
+                  disabled={currentFrame === 0}
+                  className="text-white px-2 py-1 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="text-white text-sm">
+                  Frame {currentFrame + 1} of {frames.length}
+                </span>
+                <button
+                  onClick={() => setCurrentFrame(prev => Math.min(frames.length - 1, prev + 1))}
+                  disabled={currentFrame === frames.length - 1}
+                  className="text-white px-2 py-1 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : (
+            // Video preview
+            <>
+              <video
+                src={media.treadView.preview}
+                className="w-full h-full object-contain"
+                controls
+                muted
+                playsInline
+              />
+              {frames.length > 0 && (
+                <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/50">
+                  <button
+                    onClick={() => {
+                      setShowFrames(!showFrames);
+                      setCurrentFrame(0);
+                    }}
+                    className="w-full text-white text-sm hover:underline"
+                  >
+                    {showFrames ? 'Show Video' : `View ${frames.length} Frames`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
 
     return (
-      <div className="relative w-full h-full">
-        {media.type === 'video' ? (
-          <>
-            <video
-              src={media.preview}
-              className="object-contain w-full h-full rounded-lg"
-              controls
-            />
-            {/* Toggle button for frames */}
-            <button
-              onClick={() => setShowFrames(!showFrames)}
-              className="absolute top-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-sm"
-            >
-              {showFrames ? 'Hide Frames' : 'Show Frames'}
-            </button>
-            
-            {/* Frames display */}
-            {showFrames && media.frames && media.frames.length > 0 && (
-              <div className="absolute inset-0 bg-white overflow-auto p-4">
-                <div className="grid grid-cols-2 gap-2">
-                  {media.frames.map((frame: string, index: number) => (
-                    <div key={index} className="relative">
-                      <img 
-                        src={frame} 
-                        alt={`Frame ${index}`}
-                        className="w-full rounded border border-gray-200"
-                        onLoad={handleImageLoad}
-                      />
-                      <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
-                        Frame {index}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <img
-            src={media.preview}
-            alt={`Tire ${viewType}`}
-            className="object-contain w-full h-full rounded-lg"
-            onLoad={handleImageLoad}
-          />
-        )}
-        <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm">
-          {viewType === ViewType.TREAD_VIEW ? 'Tread' : 'Sidewall'} View
-        </div>
-      </div>
+      <img 
+        src={media.treadView.preview} 
+        alt="Tyre preview" 
+        className="w-full h-full object-contain"
+      />
     );
   };
 
@@ -184,13 +194,15 @@ export default function TreadAnalysis() {
                 <Activity className="w-5 h-5" />
                 Tread Analysis
               </h2>
-              <p className="text-sm text-gray-600">Upload a clear image of the tyre tread pattern for wear and condition analysis</p>
+              <p className="text-sm text-gray-600">
+                Upload a clear image of the tyre tread pattern for wear and condition analysis
+              </p>
             </div>
             
             <div className="flex justify-center">
               <label className="flex flex-col items-center gap-2 cursor-pointer">
                 <div className="flex items-center justify-center w-80 h-80 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
-                  <MediaPreview viewType={ViewType.TREAD_VIEW} media={media.treadView} />
+                  {renderPreview()}
                 </div>
                 <input
                   ref={treadFileInputRef}
@@ -221,14 +233,14 @@ export default function TreadAnalysis() {
             </div>
           </div>
 
-          {/* Analyze Button */}
-          <Button
-            onClick={() => handleAnalyze(media, setIsAnalyzing, setError, setAnalysis)}
-            disabled={!media.treadView.file || isAnalyzing}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400"
-          >
-            {isAnalyzing ? 'Analyzing...' : 'Analyse Tyre'}
-          </Button>
+          {/* Analyze Button - should only appear once */}
+          <AnalyzeButton 
+            media={media}
+            isAnalyzing={isAnalyzing}
+            setIsAnalyzing={setIsAnalyzing}
+            setError={setError}
+            setAnalysis={setAnalysis}
+          />
 
           {/* Error Display */}
           {error && (
@@ -237,7 +249,7 @@ export default function TreadAnalysis() {
             </div>
           )}
 
-          {/* New Analysis Results Component */}
+          {/* Analysis Results */}
           {analysis.treadView && (
             <TreadAnalysisResult analysis={analysis.treadView} />
           )}
