@@ -8,6 +8,7 @@ import { ViewType, AnalysisState, ViewData } from '@/lib/types';
 import { extractVideoFrames } from '@/lib/video-utils';
 import AnalyzeButton from '@/components/ui/analyze-button';
 import TreadAnalysisResult from '@/components/ui/analysis-results/tread-analysis-results';
+import VideoPreview from '@/components/ui/video-preview';
 
 export default function TreadAnalysis() {
   const [media, setMedia] = useState<ViewData>({
@@ -26,9 +27,6 @@ export default function TreadAnalysis() {
   const [error, setError] = useState<string | null>(null);
   
   const treadFileInputRef = useRef<HTMLInputElement>(null);
-
-  const [showFrames, setShowFrames] = useState(false);
-  const [currentFrame, setCurrentFrame] = useState(0);
 
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>, viewType: ViewType) => {
     const file = e.target.files?.[0];
@@ -109,64 +107,12 @@ export default function TreadAnalysis() {
     }
 
     if (media.treadView.type === 'video') {
-      const frames = media.treadView.frames || [];  // Provide default empty array
-      
+      const frames = media.treadView.frames || [];
       return (
-        <div className="relative w-full h-full">
-          {showFrames && frames.length > 0 ? (
-            // Frame viewer
-            <div className="relative w-full h-full">
-              <img 
-                src={frames[currentFrame]} 
-                alt={`Frame ${currentFrame + 1}`}
-                className="w-full h-full object-contain"
-              />
-              <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/50 flex justify-between items-center">
-                <button
-                  onClick={() => setCurrentFrame(prev => Math.max(0, prev - 1))}
-                  disabled={currentFrame === 0}
-                  className="text-white px-2 py-1 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <span className="text-white text-sm">
-                  Frame {currentFrame + 1} of {frames.length}
-                </span>
-                <button
-                  onClick={() => setCurrentFrame(prev => Math.min(frames.length - 1, prev + 1))}
-                  disabled={currentFrame === frames.length - 1}
-                  className="text-white px-2 py-1 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          ) : (
-            // Video preview
-            <>
-              <video
-                src={media.treadView.preview}
-                className="w-full h-full object-contain"
-                controls
-                muted
-                playsInline
-              />
-              {frames.length > 0 && (
-                <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/50">
-                  <button
-                    onClick={() => {
-                      setShowFrames(!showFrames);
-                      setCurrentFrame(0);
-                    }}
-                    className="w-full text-white text-sm hover:underline"
-                  >
-                    {showFrames ? 'Show Video' : `View ${frames.length} Frames`}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        <VideoPreview 
+          preview={media.treadView.preview}
+          frames={frames}
+        />
       );
     }
 

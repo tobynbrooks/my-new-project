@@ -1,90 +1,128 @@
 import { ViewData, ViewType, AnalysisState } from '../lib/types';         // Import required types
 
-export const extractVideoFrames = (file: File): Promise<string[]> => {    // Function to extract frames from video file
-  return new Promise((resolve, reject) => {                              // Create promise for async operation
+interface FrameExtractionConfig {
+  maxFrames?: number;          // Maximum number of frames to extract
+  framesPerSecond?: number;    // How many frames to extract per second
+  quality?: number;            // JPEG quality (0-1)
+  scaleFactor?: number;        // Scale factor for frame size (0-1)
+  randomize?: boolean;         // Whether to randomize frame selection
+}
+
+const DEFAULT_CONFIG: FrameExtractionConfig = {     //change these for fine tuning 
+  maxFrames: 10,
+  framesPerSecond: 2,
+  quality: 0.5,
+  scaleFactor: 0.25,
+  randomize: true
+};
+
+export const extractVideoFrames = async (
+  file: File, 
+  config: FrameExtractionConfig = DEFAULT_CONFIG
+): Promise<string[]> => {
+  return new Promise((resolve, reject) => {
     console.group('🎥 Video Frame Extraction');
+    console.log('Config:', config);
     console.log('Starting extraction for file:', file.name);
     
-    const video = document.createElement('video');                        // Create video element in memory
-    video.playsInline = true;                                           // Set video properties for mobile compatibility
+    const video = document.createElement('video');
+    video.playsInline = true;
     video.muted = true;
     video.autoplay = false;
     
-    const canvas = document.createElement('canvas');                      // Create canvas for frame capture
-    const ctx = canvas.getContext('2d');                                // Get canvas context for drawing
-    const frames: string[] = [];                                        // Array to store captured frames
-    const MAX_FRAMES = 5;                                              // Maximum number of frames to extract
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const frames: string[] = [];
     
-    const videoUrl = URL.createObjectURL(file);                         // Create URL for video file
+    const videoUrl = URL.createObjectURL(file);
     video.src = videoUrl;
     
-    video.onloadeddata = () => {                                       // When video metadata is loaded
+    video.onloadeddata = () => {
       console.log('✅ Video data loaded:', {
         duration: video.duration,
         width: video.videoWidth,
         height: video.videoHeight
       });
 
-      canvas.width = video.videoWidth * 0.25;                          // Reduce canvas size to 25% of video
-      canvas.height = video.videoHeight * 0.25;
+      // Set canvas size based on scale factor
+      canvas.width = video.videoWidth * (config.scaleFactor ?? DEFAULT_CONFIG.scaleFactor!);
+      canvas.height = video.videoHeight * (config.scaleFactor ?? DEFAULT_CONFIG.scaleFactor!);
       
-      if (!ctx) {                                                      // Check if canvas context exists
+      if (!ctx) {
         console.error('❌ Could not get canvas context');
         URL.revokeObjectURL(videoUrl);
         reject(new Error('Canvas context not available'));
         return;
       }
 
-      const timestamps = Array.from(                                   // Create array of frame timestamps
-        { length: Math.min(MAX_FRAMES, Math.floor(video.duration)) },
-        (_, i) => (video.duration * (i + 1)) / (Math.floor(video.duration) + 1)
-      ).sort(() => Math.random() - 0.5).slice(0, MAX_FRAMES);         // Randomize and limit frame selection
+      // Calculate frame timestamps
+      const frameInterval = 1 / (config.framesPerSecond ?? DEFAULT_CONFIG.framesPerSecond!);
+      const totalPossibleFrames = Math.floor(video.duration / frameInterval);
+      const maxFrames = Math.min(
+        config.maxFrames ?? DEFAULT_CONFIG.maxFrames!,
+        totalPossibleFrames
+      );
 
-      let currentFrame = 0;                                           // Track current frame being processed
+      let timestamps = Array.from(
+        { length: totalPossibleFrames },
+        (_, i) => i * frameInterval
+      );
 
-      const processNextFrame = () => {                                // Function to process each frame
-        if (currentFrame >= timestamps.length) {                      // If all frames are processed
+      // Randomize and limit frame selection if needed
+      if (config.randomize ?? DEFAULT_CONFIG.randomize!) {
+        timestamps = timestamps.sort(() => Math.random() - 0.5);
+      }
+      timestamps = timestamps.slice(0, maxFrames);
+      timestamps.sort((a, b) => a - b); // Sort chronologically after selection
+
+      let currentFrame = 0;
+
+      const processNextFrame = () => {
+        if (currentFrame >= timestamps.length) {
           console.log('✅ Frame extraction complete:', frames.length, 'frames');
-          URL.revokeObjectURL(videoUrl);                             // Clean up video URL
+          URL.revokeObjectURL(videoUrl);
           console.groupEnd();
-          resolve(frames);                                           // Return captured frames
+          resolve(frames);
           return;
         }
 
-        video.currentTime = timestamps[currentFrame];                 // Set video to next timestamp
+        video.currentTime = timestamps[currentFrame];
       };
 
-      video.onseeked = () => {                                       // When video seeks to timestamp
+      video.onseeked = () => {
         try {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);   // Draw current frame to canvas
-          const frameData = canvas.toDataURL('image/jpeg', 0.5);     // Convert to JPEG at 50% quality
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frameData = canvas.toDataURL(
+            'image/jpeg', 
+            config.quality ?? DEFAULT_CONFIG.quality!
+          );
           
-          console.group(`📊 Frame ${currentFrame + 1} Metrics`);     // Log frame metrics
+          console.group(`📊 Frame ${currentFrame + 1} Metrics`);
           console.log({
             resolution: `${canvas.width}x${canvas.height}`,
             totalSize: `${(frameData.length / 1024).toFixed(2)}KB`,
             base64Size: `${(frameData.replace(/^data:image\/\w+;base64,/, '').length / 1024).toFixed(2)}KB`,
-            quality: '50%',
+            quality: `${(config.quality ?? DEFAULT_CONFIG.quality!) * 100}%`,
             timestamp: `${video.currentTime.toFixed(2)}s`,
             frameNumber: currentFrame + 1,
             totalFrames: timestamps.length
           });
           console.groupEnd();
           
-          frames.push(frameData);                                    // Store captured frame
+          frames.push(frameData);
           currentFrame++;
-          processNextFrame();                                        // Process next frame
+          processNextFrame();
         } catch (error) {
           console.error('Frame capture error:', error);
           currentFrame++;
-          processNextFrame();                                        // Continue to next frame on error
+          processNextFrame();
         }
       };
 
-      processNextFrame();                                            // Start frame processing
+      processNextFrame();
     };
 
-    video.onerror = (e) => {                                        // Handle video loading errors
+    video.onerror = (e) => {
       console.error('❌ Video loading error:', e);
       URL.revokeObjectURL(videoUrl);
       console.groupEnd();
